@@ -100,12 +100,15 @@
 
 .nav-toggle {
 	display: none;
-	padding: 0.4em 0.8em;
+
 }
 
 @media (max-width: 640px) {
 	.nav-toggle {
-		display: block;
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0.4em 0.8em;
 	}
 
 	.nav-links {
@@ -135,8 +138,59 @@
 	gap: 0.5rem;
 }
 
+.theme-dropdown {
+	position: relative;
+}
+
 .theme-toggle {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.35rem;
 	padding: 0.4em 0.8em;
+}
+
+.theme-caret {
+	display: inline-flex;
+	align-items: center;
+	font-size: 0.75em;
+	line-height: 1;
+}
+
+.theme-menu {
+	position: absolute;
+	top: calc(100% + 0.5rem);
+	right: 0;
+	min-width: 8rem;
+	display: flex;
+	flex-direction: column;
+	padding: 0.25rem;
+	background-color: var(--nav-bg);
+	border: 1px solid var(--nav-border);
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	z-index: 101;
+}
+
+.theme-option {
+	display: flex;
+	align-items: center;
+	gap: 0.5rem;
+	width: 100%;
+	padding: 0.45rem 0.65rem;
+	border: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: pointer;
+}
+
+.theme-option:hover {
+	background-color: var(--button-bg);
+}
+
+.theme-option.active {
+	color: var(--nav-link-active);
+	font-weight: 600;
 }
 
 @media (max-width: 640px) {
