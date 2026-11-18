@@ -1,4 +1,25 @@
+:root {
+	--nav-bg: #242424;
+	--nav-border: #3a3a3a;
+	--nav-link-active: #ffaa00;
+}
+:root[data-theme="light"] {
+	--nav-bg: #ffffff;
+	--nav-border: #dddddd;
+	--nav-link-active: #aa00aa;
+}
+
 #root {
+	width: 100%;
+	min-height: 100vh;
+	display: flex;
+	flex-direction: column;
+}
+
+.page {
+	flex: 1;
+	width: 100%;
+	box-sizing: border-box;
 	max-width: 1280px;
 	margin: 0 auto;
 	padding: 2rem;
@@ -10,15 +31,6 @@
 	padding: 1.5em;
 	will-change: filter;
 	transition: filter 300ms;
-}
-.logo:hover {
-	filter: drop-shadow(0 0 2em #646cffaa);
-}
-.logo.react:hover {
-	filter: drop-shadow(0 0 2em #61dafbaa);
-}
-.logo.cloudflare:hover {
-	filter: drop-shadow(0 0 2em #f6821faa);
 }
 
 @keyframes logo-spin {
@@ -39,7 +51,132 @@
 .card {
 	padding: 2em;
 }
+.nav {
+	position: sticky;
+	top: 0;
+	z-index: 100;
+	background-color: var(--nav-bg);
+	border-bottom: 1px solid var(--nav-border);
+}
 
-.read-the-docs {
+.nav-inner {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 1.5rem;
+	max-width: 1280px;
+	margin: 0 auto;
+	text-align: center;
+	padding: 0.75rem 1.5rem;
+}
+
+.nav-logo {
+	display: block;
+	height: 2.5rem;
+}
+
+.nav-links {
+	margin-left: auto;
+	display: flex;
+	gap: 1.5rem;
+}
+
+.nav-links a{
+	display: inline-flex;
+	align-items: center;
+	gap: 0.5rem;
+}
+
+.nav-links .mc{
+	flex-shrink: 0;
+}
+
+.nav .nav-links a.active,
+.nav .nav-links a.active:hover {
+	color: var(--nav-link-active);
+	text-decoration: underline 2px;
+	cursor: default;
+}
+
+.nav-toggle {
+	display: none;
+	padding: 0.4em 0.8em;
+}
+
+@media (max-width: 640px) {
+	.nav-toggle {
+		display: block;
+	}
+
+	.nav-links {
+		display: none;
+		position: absolute;
+		top: 100%;
+		left: 0;
+		right: 0;
+		flex-direction: column;
+		gap: 0;
+		background-color: var(--nav-bg);
+		border-bottom: 1px solid var(--nav-border);
+	}
+
+	.nav-links.open {
+		display: flex;
+	}
+
+	.nav-links a {
+		padding: 1rem 1.5rem;
+		text-align: left;
+	}
+}
+
+.nav-controls {
+	display: flex;
+	gap: 0.5rem;
+}
+
+.theme-toggle {
+	padding: 0.4em 0.8em;
+}
+
+@media (max-width: 640px) {
+	.nav-controls {
+		margin-left: auto;
+	}
+}
+.footer {
+	padding: 0.5rem;
+	text-align: center;
+	background-color: var(--nav-bg);
+	border-top: 1px solid var(--nav-border);
 	color: #888;
+}
+.mc-status {
+	max-width: 24rem;
+	margin: 2rem auto;
+	padding: 1rem 1.5rem;
+	border: 1px solid var(--nav-border);
+}
+
+.mc-motd {
+	margin: 0 0 1rem;
+	padding: 0.75rem 1rem;
+	background-color: #1e1e1e;
+	color: #ffffff;
+	font-weight: 500;
+}
+
+.mc-players {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: center;
+	gap: 0.5rem;
+}
+
+.mc-players li {
+	padding: 0.2em 0.6em;
+	border: 1px solid var(--nav-border);
 }
