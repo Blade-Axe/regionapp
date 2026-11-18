@@ -29,12 +29,7 @@ app.get("/api/ping", (c) => c.text("build 2"));
 
 app.get("/map", (c) => c.redirect("/map/", 301));
 
-app.all("/map/*", async (c) => {
-  const url = new URL(c.req.url);
-  const path = url.pathname.replace(/^\/map/, "") || "/";
-  const target = new URL(path + url.search, "https://mc.region.obphi.com");
-  return fetch(new Request(target, c.req.raw));
-});
+app.all("/map/*", (c) => fetch(c.req.raw));
 
 app.post("/api/minecraft/update", async (c) => {
 	if (!c.env.MC_SECRET || c.req.header("Authorization") !== `Bearer ${c.env.MC_SECRET}`) {
