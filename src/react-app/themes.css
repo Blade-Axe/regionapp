@@ -1,0 +1,52 @@
+/* Default theme (dark). It defines every token. */
+:root {
+	color-scheme: dark;
+	--bg: #242424;
+	--text: rgba(255, 255, 255, 0.87);
+	--surface: #242424;
+	--border: #3a3a3a;
+	--accent: #ffaa00;
+	--link: #5555ff;
+	--link-hover: #ffffff;
+	--button-bg: rgba(128, 128, 128, 0.15);
+	--button-border-hover: #646cff;
+	--muted: #888888;
+	--motd-bg: #1e1e1e;
+	--motd-text: #ffffff;
+}
+
+/* Other themes: override only the tokens that change. */
+:root[data-theme="light"] {
+	color-scheme: light;
+	--bg: #ffffff;
+	--text: #213547;
+	--surface: #ffffff;
+	--border: #dddddd;
+	--accent: #aa00aa;
+	--link-hover: #000000;
+}
+
+/* Example values. Change them as you need. */
+:root[data-theme="overworld"] {
+	color-scheme: light;
+	--bg: #f3f6ec;
+	--text: #1f3a29;
+	--surface: #93d0ae;
+	--border: #3fb37f;
+	--accent: #aa00aa;
+	--link-hover: #000000;
+}
+:root[data-theme="underground"]{
+    color-scheme: dark;
+    --bg: #1a2227;
+    --text: #dfe8e4;
+    --surface: #12201a;
+}
+:root[data-theme="nether"]{
+    color-scheme: dark;
+    --bg: #221619;
+    --text: #f1ddd4;
+    --surface: #2a140b;
+    --accent: #e18a57;
+    --button-border-hover: #e18a57;
+}

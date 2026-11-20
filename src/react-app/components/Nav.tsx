@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink } from "react-router";
-import { useTheme } from "../hooks/useTheme";
+import { useTheme, type Theme } from "../hooks/useTheme";
 
 function Nav() {
 	const [open, setOpen] = useState(false);
@@ -8,7 +8,8 @@ function Nav() {
 	const themeMenuRef = useRef<HTMLDivElement>(null);
 
 	const close = () => setOpen(false);
-	const { theme, toggle } = useTheme();
+	const { theme, setTheme, themes } = useTheme();
+	const current = themes.find((t) => t.id === theme)!;
 
 	useEffect(() => {
 		const query = window.matchMedia("(max-width: 640px)");
@@ -40,8 +41,8 @@ function Nav() {
 		};
 	}, [themeOpen]);
 
-	const selectTheme = (next: "light" | "dark") => {
-		if (next !== theme) toggle();
+	const selectTheme = (next: Theme) => {
+		setTheme(next);
 		setThemeOpen(false);
 	};
 
@@ -83,35 +84,25 @@ function Nav() {
 								setOpen(false);
 							}}
 						>
-							<span
-								className={`mc ${theme === "dark" ? "mc-black-dye" : "mc-white-dye"} mc-xl`}
-								aria-hidden="true"
-							></span>
+							<span className={`mc ${current.icon} mc-xl`} aria-hidden="true"></span>
 							<i className={`theme-caret hn ${themeOpen ? "hn-angle-up-solid" : "hn-angle-down-solid"}`} aria-hidden="true"></i>
 						</button>
 
 						{themeOpen && (
 							<div className="theme-menu" role="menu" aria-label="Theme options">
-								<button
-									type="button"
-									role="menuitemradio"
-									aria-checked={theme === "light"}
-									className={`theme-option${theme === "light" ? " active" : ""}`}
-									onClick={() => selectTheme("light")}
-								>
-									<span className="mc mc-white-dye mc-xl" aria-hidden="true"></span>
-									Light
-								</button>
-								<button
-									type="button"
-									role="menuitemradio"
-									aria-checked={theme === "dark"}
-									className={`theme-option${theme === "dark" ? " active" : ""}`}
-									onClick={() => selectTheme("dark")}
-								>
-									<span className="mc mc-black-dye mc-xl" aria-hidden="true"></span>
-									Dark
-								</button>
+								{themes.map((t) => (
+									<button
+										key={t.id}
+										type="button"
+										role="menuitemradio"
+										aria-checked={theme === t.id}
+										className={`theme-option${theme === t.id ? " active" : ""}`}
+										onClick={() => selectTheme(t.id)}
+									>
+										<span className={`mc ${t.icon} mc-xl`} aria-hidden="true"></span>
+										{t.label}
+									</button>
+								))}
 							</div>
 						)}
 					</div>
@@ -127,7 +118,7 @@ function Nav() {
 							setThemeOpen(false);
 						}}
 					>
-						{open ? <i className="hn hn-times"></i> : <i className="hn hn-bars"></i>}
+						{open ? <i className="hn hn-times" aria-hidden="true"></i> : <i className="hn hn-bars" aria-hidden="true"></i>}
 					</button>
 				</div>
 			</div>
