@@ -186,6 +186,9 @@
 	.nav-controls {
 		margin-left: auto;
 	}
+	.lb-title{
+		font-size: 20px;
+	}
 }
 .footer {
 	padding: 0.5rem;
@@ -221,4 +224,46 @@
 .mc-players li {
 	padding: 0.2em 0.6em;
 	border: 1px solid var(--border);
+}
+
+.lb-wrap {
+	overflow-x: auto;
+}
+
+.lb {
+	width: 100%;
+	border-collapse: collapse;
+	text-align: left;
+}
+
+.lb th,
+.lb td {
+	padding: 0.5rem 0.75rem;
+	border-bottom: 1px solid var(--nav-border);
+	white-space: nowrap;
+}
+
+.lb-sort,
+.lb-name {
+	all: unset;
+	cursor: pointer;
+	font-weight: 600;
+}
+
+.lb-sort.active {
+	color: var(--nav-link-active);
+}
+
+.lb-sort:focus-visible,
+.lb-name:focus-visible {
+	outline: 2px solid var(--nav-link-active);
+}
+
+.lb-detail details {
+	margin: 0.5rem 0;
+}
+
+.lb-inner {
+	width: 100%;
+	margin-top: 0.25rem;
 }

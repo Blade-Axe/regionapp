@@ -56,4 +56,34 @@ app.post("/api/minecraft/update", async (c) => {
 	return c.body(null, 204);
 });
 
+app.post("/api/stats/update", async (c) => {
+	if (c.req.header("Authorization") !== `Bearer ${c.env.MC_SECRET}`) {
+		return c.text("Unauthorized", 401);
+	}
+	const body = await c.req.json<{
+		players?: { uuid: string; name: string; stats: string }[];
+	}>();
+	const rows = (body.players ?? [])
+		.filter((p) => /^[0-9a-f-]{36}$/i.test(p.uuid))
+		.slice(0, 50);
+	await c.env.MC_STATUS.getByName("main").savePlayers(rows);
+	return c.body(null, 204);
+});
+
+app.get("/api/leaderboard", async (c) => {
+	c.header("Cache-Control", "public, max-age=30");
+	return c.json(
+		await c.env.MC_STATUS.getByName("main").getLeaderboard(
+			c.req.query("sort") ?? "playtime",
+		),
+	);
+});
+
+app.get("/api/players/:uuid", async (c) => {
+	const uuid = c.req.param("uuid");
+	if (!/^[0-9a-f-]{36}$/i.test(uuid)) return c.json({ error: "Bad id" }, 400);
+	const player = await c.env.MC_STATUS.getByName("main").getPlayer(uuid);
+	return player ? c.json(player) : c.json({ error: "Not found" }, 404);
+});
+
 export default app;
