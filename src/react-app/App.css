@@ -250,11 +250,11 @@
 	font-weight: 600;
 }
 .lb-sort:hover{
-	border: 1px solid var(--border);
+	border: 1px solid var(--accent);
 }
 .lb-name:focus-visible,
 .lb-name:hover{
-	border: 1px solid var(--border);
+	border: 1px solid var(--accent);
 }
 
 .lb-sort.active {
