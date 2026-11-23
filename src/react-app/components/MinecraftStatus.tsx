@@ -1,11 +1,16 @@
 import { useEffect, useState } from "react";
+import Head from "./Head";
 
 type Status = {
 	online: boolean;
 	motd: string;
     motdHtml: string;
 	version: string;
-	players: { online: number; max: number; list: string[] };
+	players: {
+        online: number;
+        max: number;
+        list: { name: string; uuid: string; skin: string | null }[];
+    };
 };
 
 function MinecraftStatus() {
@@ -63,12 +68,23 @@ function MinecraftStatus() {
                 Players: {status.players.online} / {status.players.max}
             </p>
 			{status.players.list.length > 0 && (
-				<ul className="mc-players">
-					{status.players.list.map((name) => (
-						<li key={name}>{name}</li>
-					))}
-				</ul>
-			)}
+                <ul className="mc-players">
+                    {status.players.list.map((player) => (
+                        <li key={player.uuid}>
+                            <div className="lb-player">
+                                <Head
+                                    src={
+                                        player.skin
+                                            ? `/api/skin/${player.skin}`
+                                            : `/api/head/${player.uuid}`
+                                    }
+                                />
+                                {player.name}
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            )}
 		</div>
 	);
 }

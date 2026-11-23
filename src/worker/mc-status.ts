@@ -1,11 +1,24 @@
 import { DurableObject } from "cloudflare:workers";
+import {
+	BUILTIN,
+	describe,
+	flatten,
+	isBuiltin,
+	isKey,
+	nest,
+	type Flat,
+	type Groups,
+	type Meta,
+} from "./metrics";
+
+export type McPlayer = { name: string; uuid: string; skin: string | null };
 
 export type McState = {
 	online: boolean;
 	motd: string;
 	motdHtml: string;
 	version: string;
-	players: { online: number; max: number; list: string[] };
+	players: { online: number; max: number; list: McPlayer[] };
 };
 
 export const EMPTY: McState = {
@@ -16,140 +29,220 @@ export const EMPTY: McState = {
 	players: { online: 0, max: 0, list: [] },
 };
 
-type PlayerRow = {
-	uuid: string;
-	name: string;
-	play_ticks: number;
-	deaths: number;
-	mob_kills: number;
-	blocks_mined: number;
-	distance_cm: number;
-};
-
-type StatGroups = Record<string, Record<string, number>>;
-
-const SORTS = new Map([
-	["playtime", "play_ticks"],
-	["deaths", "deaths"],
-	["mobs", "mob_kills"],
-	["mined", "blocks_mined"],
-	["distance", "distance_cm"],
-]);
-
-const total = (group: Record<string, number> = {}) =>
-	Object.values(group).reduce((sum, value) => sum + value, 0);
+// The server is offline when the plugin sends nothing for this long.
+// Use at least 3 times the heartbeat of the plugin.
+const OFFLINE_AFTER_MS = 180_000;
 
 export class McStatus extends DurableObject<Env> {
+	// These two lists live in memory. Each one is also stored as ONE value.
+	// A cold start reads 2 rows. The old code read one row for every statistic name.
+	private catalog = new Set<string>();
+	private skins = new Map<string, string>();
+
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
+
 		ctx.storage.sql.exec(`
-			CREATE TABLE IF NOT EXISTS players (
+			CREATE TABLE IF NOT EXISTS player_flat (
 				uuid TEXT PRIMARY KEY,
 				name TEXT NOT NULL,
-				play_ticks INTEGER NOT NULL DEFAULT 0,
-				deaths INTEGER NOT NULL DEFAULT 0,
-				mob_kills INTEGER NOT NULL DEFAULT 0,
-				blocks_mined INTEGER NOT NULL DEFAULT 0,
-				distance_cm INTEGER NOT NULL DEFAULT 0,
-				stats TEXT NOT NULL,
+				flat TEXT NOT NULL,
 				updated INTEGER NOT NULL
 			)
 		`);
+
+		ctx.blockConcurrencyWhile(async () => {
+			const [catalog, skins] = await Promise.all([
+				ctx.storage.get<string[]>("catalog"),
+				ctx.storage.get<Record<string, string>>("skins"),
+			]);
+			if (catalog === undefined && skins === undefined) {
+				await this.migrate();
+				return;
+			}
+			this.catalog = new Set(catalog ?? []);
+			this.skins = new Map(Object.entries(skins ?? {}));
+		});
 	}
 
-	savePlayers(rows: { uuid: string; name: string; stats: string }[]): void {
+	// Runs one time. It copies the two old tables into two stored values.
+	// Then it deletes the tables. You can delete this method after one deploy.
+	private async migrate(): Promise<void> {
+		const sql = this.ctx.storage.sql;
+		let keys: string[] = [];
+		let skins: Record<string, string> = {};
+		try {
+			keys = sql
+				.exec<{ key: string }>("SELECT key FROM catalog")
+				.toArray()
+				.map((r) => r.key)
+				.sort();
+			skins = Object.fromEntries(
+				sql
+					.exec<{ uuid: string; hash: string }>("SELECT uuid, hash FROM skins")
+					.toArray()
+					.map((r) => [r.uuid, r.hash]),
+			);
+		} catch {
+			// The old tables do not exist. Start with empty lists.
+		}
+		await this.ctx.storage.put({ catalog: keys, skins });
+		this.catalog = new Set(keys);
+		this.skins = new Map(Object.entries(skins));
+		sql.exec("DROP TABLE IF EXISTS catalog");
+		sql.exec("DROP TABLE IF EXISTS skins");
+	}
+
+	async savePlayers(
+		rows: { uuid: string; name: string; stats: string }[],
+	): Promise<void> {
+		const sql = this.ctx.storage.sql;
+		let added = false;
+
 		for (const row of rows) {
-			let groups: StatGroups;
+			let flat: Flat;
 			try {
-				groups = (JSON.parse(row.stats) as { stats?: StatGroups }).stats ?? {};
+				flat = flatten((JSON.parse(row.stats) as { stats?: Groups }).stats ?? {});
 			} catch {
 				continue;
 			}
 
-			const custom = groups["minecraft:custom"] ?? {};
-			const playTicks =
-				custom["minecraft:play_time"] ?? custom["minecraft:play_one_minute"] ?? 0;
-			const distance = Object.entries(custom)
-				.filter(([key]) => key.endsWith("_one_cm") && !key.includes("fall"))
-				.reduce((sum, [, value]) => sum + value, 0);
+			const name = String(row.name).slice(0, 32);
+			const json = JSON.stringify(flat);
 
-			this.ctx.storage.sql.exec(
-				`INSERT INTO players
-					(uuid, name, play_ticks, deaths, mob_kills, blocks_mined, distance_cm, stats, updated)
-				VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-				ON CONFLICT(uuid) DO UPDATE SET
+			// Do not write a row that did not change. This saves most of the writes,
+			// because most players are offline and their statistics stay the same.
+			const old = sql
+				.exec<{ name: string; flat: string }>(
+					"SELECT name, flat FROM player_flat WHERE uuid = ?",
+					row.uuid,
+				)
+				.toArray()[0];
+			if (old && old.name === name && old.flat === json) continue;
+
+			sql.exec(
+				`INSERT INTO player_flat (uuid, name, flat, updated)
+				 VALUES (?, ?, ?, ?)
+				 ON CONFLICT(uuid) DO UPDATE SET
 					name = excluded.name,
-					play_ticks = excluded.play_ticks,
-					deaths = excluded.deaths,
-					mob_kills = excluded.mob_kills,
-					blocks_mined = excluded.blocks_mined,
-					distance_cm = excluded.distance_cm,
-					stats = excluded.stats,
+					flat = excluded.flat,
 					updated = excluded.updated`,
 				row.uuid,
-				String(row.name).slice(0, 32),
-				playTicks,
-				custom["minecraft:deaths"] ?? 0,
-				custom["minecraft:mob_kills"] ?? 0,
-				total(groups["minecraft:mined"]),
-				distance,
-				JSON.stringify(groups),
+				name,
+				json,
 				Date.now(),
 			);
+
+			// Remember every new statistic name. The search uses this list.
+			for (const key of Object.keys(flat)) {
+				if (
+					this.catalog.has(key) ||
+					isBuiltin(key) ||
+					key.startsWith("total:") ||
+					!isKey(key)
+				) {
+					continue;
+				}
+				this.catalog.add(key);
+				added = true;
+			}
+		}
+
+		if (added) {
+			await this.ctx.storage.put("catalog", [...this.catalog].sort());
 		}
 	}
 
-	getLeaderboard(sort: string, limit = 100) {
-		const column = SORTS.get(sort) ?? "play_ticks";
+	async saveSkins(skins: Record<string, string>): Promise<void> {
+		let changed = false;
+		for (const [uuid, hash] of Object.entries(skins)) {
+			if (this.skins.get(uuid) !== hash) {
+				this.skins.set(uuid, hash);
+				changed = true;
+			}
+		}
+		if (changed) {
+			await this.ctx.storage.put("skins", Object.fromEntries(this.skins));
+		}
+	}
+
+	getSkin(uuid: string): string | null {
+		return this.skins.get(uuid) ?? null;
+	}
+
+	getLeaderboard(columns: string[], sort: string, limit = 100) {
+		const index = Math.max(0, columns.indexOf(sort));
 		return this.ctx.storage.sql
-			.exec<PlayerRow>(
-				`SELECT uuid, name, play_ticks, deaths, mob_kills, blocks_mined, distance_cm
-				FROM players ORDER BY ${column} DESC, name LIMIT ?`,
-				limit,
+			.exec<{ uuid: string; name: string; flat: string }>(
+				"SELECT uuid, name, flat FROM player_flat",
 			)
 			.toArray()
-			.map((r) => ({
-				uuid: r.uuid,
-				name: r.name,
-				playTicks: r.play_ticks,
-				days: Math.floor(r.play_ticks / 24000),
-				deaths: r.deaths,
-				mobKills: r.mob_kills,
-				blocksMined: r.blocks_mined,
-				distanceCm: r.distance_cm,
-			}));
+			.map((r) => {
+				const flat = JSON.parse(r.flat) as Flat;
+				return {
+					uuid: r.uuid,
+					name: r.name,
+					values: columns.map((key) => flat[key] ?? 0),
+					skin: this.skins.get(r.uuid.replace(/-/g, "").toLowerCase()) ?? null,
+				};
+			})
+			.sort((a, b) => b.values[index] - a.values[index] || a.name.localeCompare(b.name))
+			.slice(0, limit);
+	}
+
+	// The search reads the list in memory. It does not read any database rows.
+	searchCatalog(query: string, limit = 50): Meta[] {
+		const terms = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 4);
+		const matchesAll = (text: string) => terms.every((t) => text.includes(t));
+
+		const builtin = BUILTIN.filter((m) => matchesAll(`${m.key} ${m.label}`.toLowerCase()));
+		if (terms.length === 0) return builtin;
+
+		const found: Meta[] = [];
+		for (const key of this.catalog) {
+			if (found.length >= limit) break;
+			if (matchesAll(key.toLowerCase())) found.push(describe(key));
+		}
+		return [...builtin, ...found].slice(0, limit);
 	}
 
 	getPlayer(uuid: string) {
 		const row = this.ctx.storage.sql
-			.exec<{ name: string; stats: string }>(
-				"SELECT name, stats FROM players WHERE uuid = ?",
+			.exec<{ name: string; flat: string }>(
+				"SELECT name, flat FROM player_flat WHERE uuid = ?",
 				uuid,
 			)
 			.toArray()[0];
-		return row
-			? { name: row.name, stats: JSON.parse(row.stats) as StatGroups }
-			: null;
+		return row ? { name: row.name, stats: nest(JSON.parse(row.flat) as Flat) } : null;
 	}
+
 	async getState(): Promise<McState> {
 		return (await this.ctx.storage.get<McState>("state")) ?? EMPTY;
 	}
 
-	async setState(next: McState): Promise<void> {
+	async setState(incoming: McState): Promise<void> {
+		const next: McState = {
+			...incoming,
+			players: {
+				...incoming.players,
+				list: incoming.players.list.map((p) => ({
+					...p,
+					skin: this.skins.get(p.uuid) ?? null,
+				})),
+			},
+		};
+
 		const prev = await this.getState();
-		await this.ctx.storage.put("state", next);
+		// Write and send only when something changed. A heartbeat changes nothing.
+		if (JSON.stringify(prev) !== JSON.stringify(next)) {
+			await this.ctx.storage.put("state", next);
+			this.broadcast(next);
+		}
 		if (next.online) {
-			await this.ctx.storage.setAlarm(Date.now() + 120_000);
+			await this.ctx.storage.setAlarm(Date.now() + OFFLINE_AFTER_MS);
 		} else {
 			await this.ctx.storage.deleteAlarm();
 		}
-		if (JSON.stringify(prev) !== JSON.stringify(next)) {
-			this.broadcast(next);
-		}
-	}
-
-	webSocketError(ws: WebSocket) :void {
-		ws.close();
 	}
 
 	async alarm(): Promise<void> {
@@ -165,6 +258,10 @@ export class McStatus extends DurableObject<Env> {
 	}
 
 	webSocketClose(ws: WebSocket): void {
+		ws.close();
+	}
+
+	webSocketError(ws: WebSocket): void {
 		ws.close();
 	}
 
