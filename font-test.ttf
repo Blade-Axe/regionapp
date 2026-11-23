@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<script>
+			(function () {
+				var t = null;
+				try {
+					t = localStorage.getItem("theme");
+				} catch (e) {}
+				if (!t) {
+					t = matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+				}
+				document.documentElement.dataset.theme = t;
+			})();
+		</script>
+		<style>
+			html[data-theme="dark"] {
+				background-color: #242424;
+				color-scheme: dark;
+			}
+			html[data-theme="light"] {
+				background-color: #ffffff;
+				color-scheme: light;
+			}
+		</style>
+		<meta charset="UTF-8" />
+		<link rel="icon" type="image/svg+xml" href="/logo.png" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<link rel="stylesheet" href="https://mcicons.mumd.dev/releases/v2.1.1/css/all.css" integrity="sha384-Op68iRHwtX3ZkkaCqnN0YCSj/K/jufnhP46ESGCGFGfmOVOATxdc0kmgUXFRXys0" crossorigin="anonymous">
+		<title>The Region</title>
+		<script type="module" crossorigin src="/assets/index-DK5cwEgG.js"></script>
+		<link rel="stylesheet" crossorigin href="/assets/index-eHOO3iSL.css">
+	</head>
+
+	<body>
+		<div id="root"></div>
+	</body>
+</html>

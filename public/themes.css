@@ -13,6 +13,7 @@
 	--muted: #888888;
 	--motd-bg: #1e1e1e;
 	--motd-text: #ffffff;
+	--icon-filter: invert(1);
 }
 
 /* Other themes: override only the tokens that change. */
@@ -25,6 +26,7 @@
 	--accent: #aa00aa;
 	--button-border-hover: #aa00aa;
 	--link-hover: #000000;
+	--icon-filter: none;
 }
 
 /* Example values. Change them as you need. */
@@ -37,6 +39,7 @@
 	--accent: #aa00aa;
 	--button-border-hover: #aa00aa;
 	--link-hover: #000000;
+	--icon-filter: none;
 }
 :root[data-theme="underground"]{
     color-scheme: dark;
