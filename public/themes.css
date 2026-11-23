@@ -39,6 +39,7 @@
 	--accent: #aa00aa;
 	--button-border-hover: #aa00aa;
 	--link-hover: #000000;
+	--muted: #5f5f5f;
 	--icon-filter: none;
 }
 :root[data-theme="underground"]{
