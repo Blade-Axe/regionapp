@@ -1,11 +1,13 @@
 import { useEffect, useRef } from "react";
 
-function Head({ src }: { src: string }) {
+function Head({ src }: { src: string | null }) {
 	const ref = useRef<HTMLCanvasElement>(null);
 
 	useEffect(() => {
 		const ctx = ref.current?.getContext("2d");
 		if (!ctx) return;
+		ctx.clearRect(0, 0, 8, 8);
+		if (!src) return;
 		const image = new Image();
 		image.onload = () => {
 			ctx.imageSmoothingEnabled = false;

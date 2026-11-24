@@ -17,18 +17,13 @@ export const normalizeId = (id: string) => id.replace(/-/g, "").toLowerCase();
 export const isId = (id: string) => /^[0-9a-f]{32}$/.test(id);
 
 // Fallback for players that the plugin has not seen yet.
-export async function lookupSkin(id: string): Promise<string | null> {
-	try {
-		const res = await fetch(
-			`https://sessionserver.mojang.com/session/minecraft/profile/${id}`,
-		);
-		if (res.status !== 200) return null;
-		const profile = (await res.json()) as {
-			properties?: { name: string; value: string }[];
-		};
-		const value = profile.properties?.find((p) => p.name === "textures")?.value;
-		return value ? skinHashFrom(value) : null;
-	} catch {
-		return null;
+// Reads a list of uuid -> base64 "textures" value. Returns uuid -> skin hash.
+export function parseSkins(raw: Record<string, string> | undefined): Record<string, string> {
+	const skins: Record<string, string> = {};
+	for (const [rawId, value] of Object.entries(raw ?? {}).slice(0, 100)) {
+		const id = normalizeId(rawId);
+		const hash = isId(id) ? skinHashFrom(String(value)) : null;
+		if (hash) skins[id] = hash;
 	}
+	return skins;
 }

@@ -38,6 +38,8 @@ export class McStatus extends DurableObject<Env> {
 	// A cold start reads 2 rows. The old code read one row for every statistic name.
 	private catalog = new Set<string>();
 	private skins = new Map<string, string>();
+		// A copy of every player row. It is cleared when a row changes.
+	private everyone: { uuid: string; name: string; flat: Flat }[] | null = null;
 
 	constructor(ctx: DurableObjectState, env: Env) {
 		super(ctx, env);
@@ -133,6 +135,8 @@ export class McStatus extends DurableObject<Env> {
 				Date.now(),
 			);
 
+			this.everyone = null;
+
 			// Remember every new statistic name. The search uses this list.
 			for (const key of Object.keys(flat)) {
 				if (
@@ -166,8 +170,9 @@ export class McStatus extends DurableObject<Env> {
 		}
 	}
 
-	getSkin(uuid: string): string | null {
-		return this.skins.get(uuid) ?? null;
+	// Returns the players of this list that have no stored skin.
+	missingSkins(uuids: string[]): string[] {
+		return uuids.filter((u) => !this.skins.has(u.replace(/-/g, "").toLowerCase()));
 	}
 
 	getLeaderboard(columns: string[], sort: string, limit = 100) {
@@ -191,7 +196,7 @@ export class McStatus extends DurableObject<Env> {
 	}
 
 	// The search reads the list in memory. It does not read any database rows.
-	searchCatalog(query: string, limit = 50): Meta[] {
+	searchCatalog(query: string, limit = 100): Meta[] {
 		const terms = query.toLowerCase().split(/\s+/).filter(Boolean).slice(0, 4);
 		const matchesAll = (text: string) => terms.every((t) => text.includes(t));
 
@@ -214,6 +219,57 @@ export class McStatus extends DurableObject<Env> {
 			)
 			.toArray()[0];
 		return row ? { name: row.name, stats: nest(JSON.parse(row.flat) as Flat) } : null;
+	}
+
+	// Reads all rows one time. Later calls use the copy in memory.
+	private loadEveryone() {
+		if (!this.everyone) {
+			this.everyone = this.ctx.storage.sql
+				.exec<{ uuid: string; name: string; flat: string }>(
+					"SELECT uuid, name, flat FROM player_flat",
+				)
+				.toArray()
+				.map((r) => ({ uuid: r.uuid, name: r.name, flat: JSON.parse(r.flat) as Flat }));
+		}
+		return this.everyone;
+	}
+
+	// All statistics of one player, each with its rank among all players.
+	getProfile(name: string) {
+		const all = this.loadEveryone();
+		const lower = name.toLowerCase();
+		const me = all.find((p) => p.name.toLowerCase() === lower);
+		if (!me) return null;
+
+		type Above = { name: string; value: number } | null;
+		const stats: Record<
+			string,
+			Record<string, { value: number; rank: number; above: Above }>
+		> = {};
+		for (const [key, value] of Object.entries(me.flat)) {
+			let rank = 1;
+			// The nearest player above is the one with the lowest value that is still higher.
+			let above: Above = null;
+			for (const other of all) {
+				const theirs = other.flat[key] ?? 0;
+				if (theirs > value) {
+					rank++;
+					if (!above || theirs < above.value) {
+						above = { name: other.name, value: theirs };
+					}
+				}
+			}
+			const cut = key.indexOf(":");
+			const category = key.slice(0, cut);
+			(stats[category] ??= {})[key.slice(cut + 1)] = { value, rank, above };
+		}
+
+		return {
+			uuid: me.uuid,
+			name: me.name,
+			skin: this.skins.get(me.uuid.replace(/-/g, "").toLowerCase()) ?? null,
+			stats,
+		};
 	}
 
 	async getState(): Promise<McState> {

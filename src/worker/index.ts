@@ -2,7 +2,7 @@ import { Hono, type Context } from "hono";
 import { EMPTY } from "./mc-status";
 import { legacyToHtml, stripCodes } from "./motd";
 import { DEFAULT_COLUMNS, describe, isKey } from "./metrics";
-import { isId, lookupSkin, normalizeId, skinHashFrom } from "./skins";
+import { normalizeId, parseSkins } from "./skins";
 
 export { McStatus } from "./mc-status";
 const app = new Hono<{ Bindings: Env }>();
@@ -57,12 +57,7 @@ app.post("/api/minecraft/update", async (c) => {
 	const body = await c.req.json<PluginPayload>();
 	const stub = c.env.MC_STATUS.getByName("main");
 
-	const skins: Record<string, string> = {};
-	for (const [rawId, value] of Object.entries(body.skins ?? {}).slice(0, 100)) {
-		const id = normalizeId(rawId);
-		const hash = isId(id) ? skinHashFrom(String(value)) : null;
-		if (hash) skins[id] = hash;
-	}
+	const skins = parseSkins(body.skins);
 	if (Object.keys(skins).length > 0) await stub.saveSkins(skins);
 
 	if (body.online === false) {
@@ -88,7 +83,7 @@ app.post("/api/minecraft/update", async (c) => {
 });
 
 app.post("/api/stats/update", async (c) => {
-	if (c.req.header("Authorization") !== `Bearer ${c.env.MC_SECRET}`) {
+	if (!c.env.MC_SECRET || c.req.header("Authorization") !== `Bearer ${c.env.MC_SECRET}`) {
 		return c.text("Unauthorized", 401);
 	}
 	const body = await c.req.json<{
@@ -97,7 +92,18 @@ app.post("/api/stats/update", async (c) => {
 	const rows = (body.players ?? [])
 		.filter((p) => /^[0-9a-f-]{36}$/i.test(p.uuid))
 		.slice(0, 50);
-	await c.env.MC_STATUS.getByName("main").savePlayers(rows);
+	const stub = c.env.MC_STATUS.getByName("main");
+	await stub.savePlayers(rows);
+	// The plugin looks up the skins that are missing.
+	return c.json({ missing: await stub.missingSkins(rows.map((r) => r.uuid)) });
+});
+
+app.post("/api/skins/update", async (c) => {
+	if (!c.env.MC_SECRET || c.req.header("Authorization") !== `Bearer ${c.env.MC_SECRET}`) {
+		return c.text("Unauthorized", 401);
+	}
+	const body = await c.req.json<{ skins?: Record<string, string> }>();
+	await c.env.MC_STATUS.getByName("main").saveSkins(parseSkins(body.skins));
 	return c.body(null, 204);
 });
 
@@ -105,7 +111,7 @@ app.get("/api/leaderboard", (c) =>
 	cached(c, 60, async () => {
 		const requested = [
 			...new Set((c.req.query("columns") ?? "").split(",").filter(isKey)),
-		].slice(0, 8);
+		].slice(0, 5);
 		const keys = requested.length > 0 ? requested : DEFAULT_COLUMNS;
 		const sort = c.req.query("sort") ?? "";
 
@@ -134,6 +140,15 @@ app.get("/api/players/:uuid", async (c) => {
 	return player ? c.json(player) : c.json({ error: "Not found" }, 404);
 });
 
+app.get("/api/users/:name", (c) =>
+	cached(c, 60, async () => {
+		const name = c.req.param("name");
+		if (!/^[A-Za-z0-9_.-]{1,32}$/.test(name)) return c.json({ error: "Bad name" }, 400);
+		const profile = await c.env.MC_STATUS.getByName("main").getProfile(name);
+		return profile ? c.json(profile) : c.json({ error: "Not found" }, 404);
+	}),
+);
+
 // Serves a skin picture. The hash is the content, so the browser can keep it for ever.
 app.get("/api/skin/:hash", async (c) => {
 	const hash = c.req.param("hash");
@@ -150,25 +165,6 @@ app.get("/api/skin/:hash", async (c) => {
 			"Cache-Control": "public, max-age=31536000, immutable",
 		},
 	});
-});
-
-// Fallback for a player without a stored skin. It asks Mojang one time and keeps the result.
-app.get("/api/head/:uuid", async (c) => {
-	const id = normalizeId(c.req.param("uuid"));
-	if (!isId(id)) return c.text("Bad id", 400);
-
-	const stub = c.env.MC_STATUS.getByName("main");
-	let hash = await stub.getSkin(id);
-	if (!hash) {
-		hash = await lookupSkin(id);
-		if (hash) await stub.saveSkins({ [id]: hash });
-	}
-	if (!hash) {
-		c.header("Cache-Control", "public, max-age=300");
-		return c.text("No skin", 404);
-	}
-	c.header("Cache-Control", "public, max-age=3600");
-	return c.redirect(`/api/skin/${hash}`, 302);
 });
 
 export default app;

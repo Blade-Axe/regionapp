@@ -1,52 +1,25 @@
-import { Fragment, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Head from "../components/Head";
+import { Link } from "react-router";
 
 type Kind = "time" | "distance" | "tenths" | "count";
 type Meta = { key: string; label: string; group: string; kind: Kind };
 type Row = { uuid: string; name: string; skin: string | null; values: number[] };
 type Board = { columns: Meta[]; sort: string; rows: Row[] };
-type Detail = { name: string; stats: Record<string, Record<string, number>> };
 type PickerTarget = { index: number | null };
 
 const STORAGE_KEY = "lb-columns";
 const MAX_COLUMNS = 5;
-
-const CATEGORY_NAMES: Record<string, string> = {
-	custom: "General",
-	mined: "Blocks mined",
-	broken: "Items broken",
-	crafted: "Items crafted",
-	used: "Items used",
-	picked_up: "Items picked up",
-	dropped: "Items dropped",
-	killed: "Mobs killed",
-	killed_by: "Killed by mobs",
-};
 
 const formatTicks = (ticks: number) => {
 	const minutes = Math.floor(ticks / 20 / 60);
 	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 };
 
-const pretty = (key: string) =>
-	key.replace(/^minecraft:/, "").replace(/_/g, " ");
-
 function formatMetric(kind: Kind, value: number) {
 	if (kind === "time") return formatTicks(value);
 	if (kind === "distance") return `${(value / 100000).toFixed(2)} km`;
 	if (kind === "tenths") return (value / 10).toFixed(1);
-	return value.toLocaleString();
-}
-
-// Used in the player detail view. Only the "custom" group has special units.
-function formatDetail(category: string, key: string, value: number) {
-	if (category === "custom") {
-		if (key.endsWith("_one_cm")) return `${(value / 100000).toFixed(2)} km`;
-		if (key.includes("time") || key === "play_one_minute") {
-			return formatTicks(value);
-		}
-		if (key.startsWith("damage_")) return (value / 10).toFixed(1);
-	}
 	return value.toLocaleString();
 }
 
@@ -108,8 +81,8 @@ function Picker({
 					</li>
 				))}
 			</ul>
-			{query !== "" && results.length >= 50 && (
-				<p className="lb-group">Only the first 50 results show. Type more to narrow them.</p>
+			{query !== "" && results.length >= 100 && (
+				<p className="lb-group">Only the first 100 results show. Type more to narrow them.</p>
 			)}
 			{query !== "" && results.length === 0 && (
 				<p className="lb-group">No statistic found.</p>
@@ -124,8 +97,6 @@ function Stats() {
 	const [board, setBoard] = useState<Board | null>(null);
 	const [error, setError] = useState(false);
 	const [picker, setPicker] = useState<PickerTarget | null>(null);
-	const [open, setOpen] = useState<string | null>(null);
-	const [detail, setDetail] = useState<Detail | null>(null);
 
 	useEffect(() => {
 		const params = new URLSearchParams();
@@ -172,22 +143,6 @@ function Stats() {
 	const remove = (index: number) => {
 		if (!board) return;
 		updateColumns(board.columns.map((c) => c.key).filter((_, i) => i !== index));
-	};
-
-	const toggle = (uuid: string) => {
-		if (open === uuid) {
-			setOpen(null);
-			return;
-		}
-		setOpen(uuid);
-		setDetail(null);
-		fetch(`/api/players/${uuid}`)
-			.then((res) => {
-				if (!res.ok) throw new Error("Bad response");
-				return res.json() as Promise<Detail>;
-			})
-			.then(setDetail)
-			.catch(() => setOpen(null));
 	};
 
 	if (error && !board) return <p>Leaderboard is not available.</p>;
@@ -243,7 +198,7 @@ function Stats() {
 											aria-label={`Change ${col.label}`}
 											onClick={() => setPicker({ index: i })}
 										>
-											Edit
+											[Edit]
 										</button>
 										{board.columns.length > 1 && (
 											<button
@@ -251,7 +206,7 @@ function Stats() {
 												aria-label={`Remove ${col.label}`}
 												onClick={() => remove(i)}
 											>
-												×
+												[×]
 											</button>
 										)}
 									</th>
@@ -260,52 +215,22 @@ function Stats() {
 						</thead>
 						<tbody>
 							{board.rows.map((row, index) => (
-								<Fragment key={row.uuid}>
-									<tr>
-										<td>{index + 1}</td>
-										<td>
-											<div className="lb-player">
-												<Head src={row.skin ? `/api/skin/${row.skin}` : `/api/head/${row.uuid}`} />
-												<button className="lb-name" onClick={() => toggle(row.uuid)}>
-													{row.name}
-												</button>
-											</div>
+								<tr key={row.uuid}>
+									<td>{index + 1}</td>
+									<td>
+										<div className="lb-player">
+											<Head src={row.skin ? `/api/skin/${row.skin}` : `/api/head/${row.uuid}`} />
+											<Link to={`/user/${encodeURIComponent(row.name)}`} className="lb-name">
+												{row.name}
+											</Link>
+										</div>
+									</td>
+									{row.values.map((value, i) => (
+										<td key={board.columns[i].key}>
+											{formatMetric(board.columns[i].kind, value)}
 										</td>
-										{row.values.map((value, i) => (
-											<td key={board.columns[i].key}>
-												{formatMetric(board.columns[i].kind, value)}
-											</td>
-										))}
-									</tr>
-									{open === row.uuid && (
-										<tr>
-											<td colSpan={board.columns.length + 2} className="lb-detail">
-												{!detail
-													? "Loading..."
-													: Object.entries(detail.stats).map(([category, entries]) => (
-															<details key={category}>
-																<summary>
-																	{CATEGORY_NAMES[category] ?? pretty(category)} (
-																	{Object.keys(entries).length})
-																</summary>
-																<table className="lb-inner">
-																	<tbody>
-																		{Object.entries(entries)
-																			.sort(([, a], [, b]) => b - a)
-																			.map(([key, value]) => (
-																				<tr key={key}>
-																					<td>{pretty(key)}</td>
-																					<td>{formatDetail(category, key, value)}</td>
-																				</tr>
-																			))}
-																	</tbody>
-																</table>
-															</details>
-														))}
-											</td>
-										</tr>
-									)}
-								</Fragment>
+									))}
+								</tr>
 							))}
 						</tbody>
 					</table>

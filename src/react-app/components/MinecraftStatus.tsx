@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router";
 import Head from "./Head";
 
 type Status = {
@@ -72,14 +73,13 @@ function MinecraftStatus() {
                     {status.players.list.map((player) => (
                         <li key={player.uuid}>
                             <div className="lb-player">
-                                <Head
-                                    src={
-                                        player.skin
-                                            ? `/api/skin/${player.skin}`
-                                            : `/api/head/${player.uuid}`
-                                    }
-                                />
-                                {player.name}
+                                <Head src={player.skin ? `/api/skin/${player.skin}` : null} />
+                                <Link
+                                    to={`/user/${encodeURIComponent(player.name)}`}
+                                    className="lb-name"
+                                >
+                                    {player.name}
+                                </Link>
                             </div>
                         </li>
                     ))}
