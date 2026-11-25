@@ -107,21 +107,38 @@ app.post("/api/skins/update", async (c) => {
 	return c.body(null, 204);
 });
 
-app.get("/api/leaderboard", (c) =>
-	cached(c, 60, async () => {
-		const requested = [
-			...new Set((c.req.query("columns") ?? "").split(",").filter(isKey)),
-		].slice(0, 5);
-		const keys = requested.length > 0 ? requested : DEFAULT_COLUMNS;
-		const sort = c.req.query("sort") ?? "";
+// app.get("/api/leaderboard", (c) =>
+// 	cached(c, 60, async () => {
+// 		const requested = [
+// 			...new Set((c.req.query("columns") ?? "").split(",").filter(isKey)),
+// 		].slice(0, 5);
+// 		const keys = requested.length > 0 ? requested : DEFAULT_COLUMNS;
+// 		const sort = c.req.query("sort") ?? "";
 
+// 		return c.json({
+// 			columns: keys.map((key) => describe(key)),
+// 			sort: keys.includes(sort) ? sort : keys[0],
+// 			rows: await c.env.MC_STATUS.getByName("main").getLeaderboard(keys, sort),
+// 		});
+// 	}),
+// );
+
+app.get("/api/leaderboard", (c) => {
+	const raw = c.req.query("columns") ?? "";
+	const requested = raw === "" ? [] : [...new Set(raw.split(","))];
+	if (requested.length > 5 || !requested.every(isKey)) {
+		return c.json({ error: "Bad columns" }, 400);
+	}
+	return cached(c, 60, async () => {
+		const keys = requested.length > 0 ? requested : DEFAULT_COLUMNS; //uses default columns on load
+		const sort = c.req.query("sort") ?? ""; //uses the URL
 		return c.json({
 			columns: keys.map((key) => describe(key)),
 			sort: keys.includes(sort) ? sort : keys[0],
 			rows: await c.env.MC_STATUS.getByName("main").getLeaderboard(keys, sort),
 		});
-	}),
-);
+	});
+});
 
 app.get("/api/stats/search", (c) =>
 	cached(c, 300, async () =>
