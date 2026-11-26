@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Head from "../components/Head";
 import { Link } from "react-router";
 
 type Kind = "time" | "distance" | "tenths" | "count";
 type Meta = { key: string; label: string; group: string; kind: Kind };
 type Row = { uuid: string; name: string; skin: string | null; values: number[] };
-type Board = { columns: Meta[]; sort: string; rows: Row[] };
+type Board = { columns: Meta[]; rows: Row[] };
 type PickerTarget = { index: number | null };
 
 const STORAGE_KEY = "lb-columns";
@@ -93,6 +93,7 @@ function Picker({
 
 function Stats() {
 	const [custom, setCustom] = useState<string[] | null>(loadColumns);
+	const [dir, setDir] = useState<"desc" | "asc">("desc");
 	const [sort, setSort] = useState<string | null>(null);
 	const [board, setBoard] = useState<Board | null>(null);
 	const [error, setError] = useState(false);
@@ -101,7 +102,6 @@ function Stats() {
 	useEffect(() => {
 		const params = new URLSearchParams();
 		if (custom) params.set("columns", custom.join(","));
-		if (sort) params.set("sort", sort);
 
 		fetch(`/api/leaderboard?${params.toString()}`)
 			.then((res) => {
@@ -113,7 +113,33 @@ function Stats() {
 				setError(false);
 			})
 			.catch(() => setError(true));
-	}, [custom, sort]);
+	}, [custom]);
+
+	// The sort key is a choice of the visitor. If it is not a column, use the first column.
+	const sortKey =
+		board && sort && board.columns.some((c) => c.key === sort)
+			? sort
+			: (board?.columns[0]?.key ?? null);
+
+	// The browser sorts the rows. A click on a header makes no request.
+	const sortedRows = useMemo(() => {
+		if (!board || !sortKey) return [];
+		const index = board.columns.findIndex((c) => c.key === sortKey);
+		const sign = dir === "desc" ? 1 : -1;
+		return [...board.rows].sort(
+			(a, b) =>
+				sign * (b.values[index] - a.values[index]) || a.name.localeCompare(b.name),
+		);
+	}, [board, sortKey, dir]);
+
+	const sortBy = (key: string) => {
+		if (key === sortKey) {
+			setDir((d) => (d === "desc" ? "asc" : "desc"));
+		} else {
+			setSort(key);
+			setDir("desc");
+		}
+	};
 
 	const updateColumns = (next: string[] | null) => {
 		try {
@@ -122,7 +148,10 @@ function Stats() {
 		} catch {
 			// Storage is not available. The choice lasts until the page closes.
 		}
-		if (!next || (sort && !next.includes(sort))) setSort(null);
+		if (!next || (sort && !next.includes(sort))) {
+			setSort(null);
+			setDir("desc");
+		}
 		setCustom(next);
 	};
 
@@ -186,12 +215,18 @@ function Stats() {
 								<th>#</th>
 								<th>Player</th>
 								{board.columns.map((col, i) => (
-									<th key={col.key}>
+									<th
+										key={col.key}
+										aria-sort={
+											sortKey === col.key ? (dir === "desc" ? "descending" : "ascending") : "none"
+										}
+									>
 										<button
-											className={`lb-sort${board.sort === col.key ? " active" : ""}`}
-											onClick={() => setSort(col.key)}
+											className={`lb-sort${sortKey === col.key ? " active" : ""}`}
+											onClick={() => sortBy(col.key)}
 										>
-											{col.label}
+											{col.label}{" "}
+											{sortKey === col.key ? (dir === "desc" ? <i className="hn hn-angle-down"></i> : <i className="hn hn-angle-up"></i>) : "-"}
 										</button>
 										<button
 											className="lb-tool"
@@ -214,9 +249,9 @@ function Stats() {
 							</tr>
 						</thead>
 						<tbody>
-							{board.rows.map((row, index) => (
+							{sortedRows.map((row, index) => (
 								<tr key={row.uuid}>
-									<td>{index + 1}</td>
+									<td>{dir === "desc" ? index + 1 : sortedRows.length - index}</td>
 									<td>
 										<div className="lb-player">
 											<Head src={row.skin ? `/api/skin/${row.skin}` : `/api/head/${row.uuid}`} />

@@ -175,8 +175,7 @@ export class McStatus extends DurableObject<Env> {
 		return uuids.filter((u) => !this.skins.has(u.replace(/-/g, "").toLowerCase()));
 	}
 
-	getLeaderboard(columns: string[], sort: string, limit = 100) {
-		const index = Math.max(0, columns.indexOf(sort));
+	getLeaderboard(columns: string[]) {
 		return this.ctx.storage.sql
 			.exec<{ uuid: string; name: string; flat: string }>(
 				"SELECT uuid, name, flat FROM player_flat",
@@ -191,8 +190,6 @@ export class McStatus extends DurableObject<Env> {
 					skin: this.skins.get(r.uuid.replace(/-/g, "").toLowerCase()) ?? null,
 				};
 			})
-			.sort((a, b) => b.values[index] - a.values[index] || a.name.localeCompare(b.name))
-			.slice(0, limit);
 	}
 
 	// The search reads the list in memory. It does not read any database rows.

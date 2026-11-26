@@ -125,17 +125,22 @@ app.post("/api/skins/update", async (c) => {
 
 app.get("/api/leaderboard", (c) => {
 	const raw = c.req.query("columns") ?? "";
+	const params = new URL(c.req.url).searchParams;
+	if (
+		[...params.keys()].some((k) => k !== "columns") ||
+		params.getAll("columns").length > 1
+	) {
+		return c.json({ error: "Bad query" }, 400);
+	}
 	const requested = raw === "" ? [] : [...new Set(raw.split(","))];
 	if (requested.length > 5 || !requested.every(isKey)) {
 		return c.json({ error: "Bad columns" }, 400);
 	}
 	return cached(c, 60, async () => {
 		const keys = requested.length > 0 ? requested : DEFAULT_COLUMNS; //uses default columns on load
-		const sort = c.req.query("sort") ?? ""; //uses the URL
 		return c.json({
 			columns: keys.map((key) => describe(key)),
-			sort: keys.includes(sort) ? sort : keys[0],
-			rows: await c.env.MC_STATUS.getByName("main").getLeaderboard(keys, sort),
+			rows: await c.env.MC_STATUS.getByName("main").getLeaderboard(keys),
 		});
 	});
 });
